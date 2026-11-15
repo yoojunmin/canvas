@@ -14,6 +14,9 @@
   const hexInput = $('hex-input');
   const rgbInputs = [$('red-input'), $('green-input'), $('blue-input')];
   const sizeSlider = $('brush-size');
+  const canvasPaper = $('canvas-paper');
+  const canvasStage = $('canvas-stage');
+  const canvasViewer = $('canvas-viewer');
   let activeBoardId = null;
   let joiningBoardId = null;
   let boards = [];
@@ -22,6 +25,7 @@
   let hasDrawing = false;
   let isDrawing = false;
   let activeStroke = null;
+  let zoom = 100;
   let toastTimer;
 
   ctx.fillStyle = '#fbfaf6';
@@ -145,6 +149,35 @@
     $('size-value').textContent = sizeSlider.value;
     const pct = ((Number(sizeSlider.value) - Number(sizeSlider.min)) / (Number(sizeSlider.max) - Number(sizeSlider.min))) * 100;
     sizeSlider.style.setProperty('--range-progress', `${pct}%`);
+  }
+
+  function updateZoom(nextZoom, preserveCenter = true) {
+    const oldZoom = zoom;
+    const centerX = canvasStage.scrollLeft + canvasStage.clientWidth / 2;
+    const centerY = canvasStage.scrollTop + canvasStage.clientHeight / 2;
+    zoom = Math.max(50, Math.min(250, nextZoom));
+    canvasPaper.style.width = `${zoom}%`;
+    $('zoom-level').textContent = `${zoom}%`;
+    if (preserveCenter && oldZoom !== zoom) {
+      requestAnimationFrame(() => {
+        const ratio = zoom / oldZoom;
+        canvasStage.scrollLeft = centerX * ratio - canvasStage.clientWidth / 2;
+        canvasStage.scrollTop = centerY * ratio - canvasStage.clientHeight / 2;
+      });
+    }
+  }
+
+  async function toggleExpandedCanvas() {
+    try {
+      if (document.fullscreenElement === canvasViewer) await document.exitFullscreen();
+      else if (canvasViewer.requestFullscreen) await canvasViewer.requestFullscreen();
+      else canvasViewer.classList.toggle('expanded');
+    } catch {
+      canvasViewer.classList.toggle('expanded');
+    }
+    const expanded = document.fullscreenElement === canvasViewer || canvasViewer.classList.contains('expanded');
+    $('expand-canvas').setAttribute('aria-label', expanded ? '캔버스 크게 보기 닫기' : '캔버스 크게 보기');
+    $('expand-canvas').title = expanded ? '크게 보기 닫기' : '화면 크게 보기';
   }
 
   function renderBoards() {
@@ -393,12 +426,30 @@
     applyAction(action);
     socket.emit('board:action', { boardId: activeBoardId, action });
   });
+  $('zoom-out').addEventListener('click', () => updateZoom(zoom - 25));
+  $('zoom-in').addEventListener('click', () => updateZoom(zoom + 25));
+  $('zoom-fit').addEventListener('click', () => {
+    updateZoom(100, false);
+    canvasStage.scrollTo({ left: 0, top: 0, behavior: 'smooth' });
+  });
+  $('expand-canvas').addEventListener('click', toggleExpandedCanvas);
+  document.addEventListener('fullscreenchange', () => {
+    if (!document.fullscreenElement && !canvasViewer.classList.contains('expanded')) {
+      $('expand-canvas').setAttribute('aria-label', '캔버스 크게 보기');
+      $('expand-canvas').title = '화면 크게 보기';
+    }
+  });
 
   document.addEventListener('keydown', (event) => {
     if (event.target.matches('input')) return;
     const shortcuts = { b: 'brush', e: 'eraser', f: 'fill', i: 'eyedropper' };
     if (shortcuts[event.key.toLowerCase()]) setTool(shortcuts[event.key.toLowerCase()]);
     if (event.key === 'Escape' && !$('board-modal').hidden) closeModal();
+    if (event.key === 'Escape' && canvasViewer.classList.contains('expanded')) {
+      canvasViewer.classList.remove('expanded');
+      $('expand-canvas').setAttribute('aria-label', '캔버스 크게 보기');
+      $('expand-canvas').title = '화면 크게 보기';
+    }
   });
 
   updateSize();
