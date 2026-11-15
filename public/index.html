@@ -70,6 +70,10 @@
                 <button class="zoom-button" id="zoom-in" aria-label="캔버스 확대" title="확대">+</button>
                 <button class="zoom-fit" id="zoom-fit">맞춤</button>
               </div>
+              <div class="history-controls" aria-label="실행 취소 및 다시 실행">
+                <button class="history-button" id="undo-button" aria-label="실행 취소" title="실행 취소 (Ctrl+Z)" disabled><span>↶</span><span class="history-label">되돌리기</span></button>
+                <button class="history-button" id="redo-button" aria-label="다시 실행" title="다시 실행 (Ctrl+Shift+Z)" disabled><span>↷</span><span class="history-label">다시하기</span></button>
+              </div>
               <button class="expand-button" id="expand-canvas" aria-label="캔버스 크게 보기" title="화면 크게 보기"><span aria-hidden="true">⛶</span><span class="expand-label">크게 보기</span></button>
             </div>
             <div class="canvas-stage" id="canvas-stage">
@@ -89,6 +93,14 @@
                 <button class="tool-button" data-tool="eraser" aria-label="지우개" title="지우개 (E)"><span class="tool-icon eraser-icon">◩</span><span>지우개</span></button>
                 <button class="tool-button" data-tool="fill" aria-label="페인트통" title="페인트통 (F)"><span class="tool-icon">◕</span><span>페인트</span></button>
                 <button class="tool-button" data-tool="eyedropper" aria-label="스포이드" title="스포이드 (I)"><span class="tool-icon">⌖</span><span>스포이드</span></button>
+              </div>
+              <div class="brush-settings">
+                <div class="brush-presets" aria-label="브러시 종류">
+                  <button class="brush-preset selected" data-brush="normal" title="일반 브러시 (1)"><span class="preset-mark normal-mark"></span><span>일반</span></button>
+                  <button class="brush-preset" data-brush="pencil" title="연필 브러시 (2)"><span class="preset-mark pencil-mark"></span><span>연필</span></button>
+                  <button class="brush-preset" data-brush="paintbrush" title="붓 브러시 (3)"><span class="preset-mark paint-mark"></span><span>붓</span></button>
+                </div>
+                <label class="opacity-control"><span>불투명도 <strong id="brush-opacity-value">100%</strong></span><input id="brush-opacity" type="range" min="0" max="100" value="100" aria-label="브러시 불투명도"></label>
               </div>
             </div>
 
@@ -116,7 +128,15 @@
             </div>
           </section>
 
-          <footer class="workspace-footer"><span><kbd>마우스</kbd> 또는 <kbd>터치</kbd>로 그리기</span><span class="footer-separator">·</span><span>모든 그림은 실시간으로 공유돼요</span><span class="footer-status"><span class="live-dot"></span> <span id="connection-state">연결 중</span></span></footer>
+          <section class="layers-panel" aria-label="레이어">
+            <div class="layers-heading">
+              <div><span class="layers-heading-icon">▱</span><strong>레이어</strong><span class="layers-count" id="layers-count">1 / 8</span></div>
+              <button class="add-layer-button" id="add-layer-button"><span>+</span> 레이어 추가</button>
+            </div>
+            <div class="layer-list" id="layer-list"></div>
+          </section>
+
+          <footer class="workspace-footer"><span><kbd>마우스</kbd> 또는 <kbd>터치</kbd>로 그리기</span><span class="footer-separator">·</span><span>모든 그림은 실시간으로 공유돼요</span><button class="shortcut-open" id="shortcuts-open">⌘ 단축키</button><span class="footer-status"><span class="live-dot"></span> <span id="connection-state">연결 중</span></span></footer>
         </section>
       </main>
     </div>
@@ -133,6 +153,24 @@
         <div class="modal-error" id="modal-error" role="status"></div>
         <button class="modal-submit" type="submit">캔버스 만들기 <span>↗</span></button>
       </form>
+    </div>
+
+    <div class="modal-backdrop" id="shortcuts-modal" hidden>
+      <section class="modal-card shortcuts-card" role="dialog" aria-modal="true" aria-labelledby="shortcuts-title">
+        <button type="button" class="modal-close" id="close-shortcuts" aria-label="닫기">×</button>
+        <div class="modal-icon">⌘</div>
+        <div class="eyebrow">QUICK CONTROLS</div>
+        <h2 id="shortcuts-title">단축키</h2>
+        <p>그리기에 집중할 수 있도록 키보드로 빠르게 조작해요.</p>
+        <div class="shortcut-list">
+          <div><span>브러시 / 지우개 / 페인트 / 스포이드</span><kbd>B / E / F / I</kbd></div>
+          <div><span>일반 / 연필 / 붓</span><kbd>1 / 2 / 3</kbd></div>
+          <div><span>실행 취소 / 다시 실행</span><kbd>Ctrl+Z / Ctrl+Shift+Z</kbd></div>
+          <div><span>브러시 크기</span><kbd>[ / ]</kbd></div>
+          <div><span>캔버스 확대 / 축소</span><kbd>+ / −</kbd></div>
+          <div><span>단축키 도움말 / 닫기</span><kbd>? / Esc</kbd></div>
+        </div>
+      </section>
     </div>
 
     <div class="toast" id="toast" role="status" aria-live="polite"></div>
