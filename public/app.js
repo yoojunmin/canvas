@@ -6,7 +6,120 @@
   const canvasPaper = document.getElementById('canvas-paper');
   const canvasStage = document.getElementById('canvas-stage');
   const canvasViewer = document.getElementById('canvas-viewer');
-  const socket = io();
+
+  class LocalPreviewSocket {
+    constructor() {
+      this.localMode = true;
+      this.connected = true;
+      this.id = `local-${Math.random().toString(36).slice(2, 9)}`;
+      this.handlers = new Map();
+      this.currentBoardId = null;
+      this.boards = new Map();
+      try {
+        const saved = JSON.parse(localStorage.getItem('multicanvas-local-preview') || '[]');
+        saved.forEach((board) => this.boards.set(board.id, { ...board, undone: new Set(board.undone || []) }));
+      } catch { /* Local preview still works when storage is unavailable. */ }
+      if (!this.boards.size) this.boards.set('lobby', this.makeBoard('lobby', '라운지'));
+      queueMicrotask(() => this.dispatch('connect'));
+    }
+    makeBoard(id, name) {
+      return { id, name, history: [], undone: new Set(), layers: [{ id: 'layer-1', name: '레이어 1', visible: true, opacity: 1 }] };
+    }
+    on(event, callback) {
+      if (!this.handlers.has(event)) this.handlers.set(event, []);
+      this.handlers.get(event).push(callback);
+      return this;
+    }
+    dispatch(event, data) {
+      (this.handlers.get(event) || []).forEach((callback) => callback(data));
+    }
+    boardState(board) {
+      this.dispatch('board:state', {
+        boardId: board.id,
+        layers: board.layers,
+        history: board.history.filter((action) => !board.undone.has(action.id)),
+      });
+    }
+    boardSummaries() {
+      return [...this.boards.values()].map((board) => ({ id: board.id, name: board.name, people: board.id === this.currentBoardId ? 1 : 0 }));
+    }
+    persist() {
+      try {
+        localStorage.setItem('multicanvas-local-preview', JSON.stringify([...this.boards.values()].map((board) => ({
+          ...board, undone: [...board.undone],
+        }))));
+      } catch { /* Local preview remains usable for this page session. */ }
+    }
+    emit(event, payload = {}, reply = () => {}) {
+      const board = this.boards.get(payload.boardId || this.currentBoardId);
+      if (event === 'boards:list') this.dispatch('boards:update', this.boardSummaries());
+      else if (event === 'board:create') {
+        const name = String(payload.name || '').trim().slice(0, 28);
+        if (!name) return reply({ ok: false, message: '캔버스 이름을 입력해 주세요.' });
+        if (this.boards.size >= 50) return reply({ ok: false, message: '캔버스는 최대 50개까지 만들 수 있어요.' });
+        const id = `local-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`;
+        const created = this.makeBoard(id, name);
+        this.boards.set(id, created);
+        this.persist();
+        this.dispatch('boards:update', this.boardSummaries());
+        reply({ ok: true, board: { id, name } });
+      } else if (event === 'board:join') {
+        const next = this.boards.get(payload.id);
+        if (!next) return this.dispatch('board:error', { message: '캔버스를 찾을 수 없어요.' });
+        this.currentBoardId = next.id;
+        this.boardState(next);
+        this.dispatch('board:presence', { boardId: next.id, count: 1 });
+        this.dispatch('boards:update', this.boardSummaries());
+      } else if (event === 'stroke:end' && board) {
+        board.history.push({ ...payload.stroke, actorId: this.id });
+        this.persist();
+      } else if (event === 'board:action' && board) {
+        board.history.push({ ...payload.action, actorId: this.id });
+        this.persist();
+      } else if (event === 'board:undo' && board) {
+        const action = board.history.find((item) => item.id === payload.id);
+        if (action?.actorId === this.id) {
+          board.undone.add(payload.id);
+          this.persist();
+          this.boardState(board);
+        }
+      } else if (event === 'board:redo' && board) {
+        const action = board.history.find((item) => item.id === payload.id);
+        if (action?.actorId === this.id) {
+          board.undone.delete(payload.id);
+          this.persist();
+          this.boardState(board);
+        }
+      } else if (event === 'layer:create' && board) {
+        if (board.layers.length >= 8) return reply({ ok: false, message: '레이어는 최대 8개까지 만들 수 있어요.' });
+        const layer = { id: `local-layer-${Date.now().toString(36)}`, name: `레이어 ${board.layers.length + 1}`, visible: true, opacity: 1 };
+        board.layers.push(layer);
+        this.persist();
+        this.dispatch('layers:update', { boardId: board.id, layers: board.layers });
+        reply({ ok: true, layer });
+      } else if (event === 'layer:update' && board) {
+        const layer = board.layers.find((item) => item.id === payload.id);
+        if (!layer) return;
+        Object.assign(layer, payload.patch);
+        this.persist();
+        this.dispatch('layers:update', { boardId: board.id, layers: board.layers });
+      } else if (event === 'layer:delete' && board && board.layers.length > 1) {
+        board.layers = board.layers.filter((layer) => layer.id !== payload.id);
+        this.persist();
+        this.dispatch('layers:update', { boardId: board.id, layers: board.layers });
+      } else if (event === 'layer:move' && board) {
+        const from = board.layers.findIndex((layer) => layer.id === payload.id);
+        const to = from + Math.sign(Number(payload.direction) || 0);
+        if (from < 0 || to < 0 || to >= board.layers.length) return;
+        [board.layers[from], board.layers[to]] = [board.layers[to], board.layers[from]];
+        this.persist();
+        this.dispatch('layers:update', { boardId: board.id, layers: board.layers });
+      }
+      return this;
+    }
+  }
+
+  const socket = typeof window.io === 'function' ? window.io() : new LocalPreviewSocket();
   const $ = (id) => document.getElementById(id);
   const boardList = $('board-list');
   const mobileBoardList = $('mobile-board-list');
@@ -33,6 +146,7 @@
   let hasDrawing = false;
   let zoom = 100;
   let toastTimer;
+  let connectionNoticeShown = false;
   const layerSurfaces = new Map();
   const remoteStrokes = new Map();
   const historyByBoard = new Map();
@@ -102,14 +216,32 @@
     let radius = stroke.width / 2;
     let alpha = opacity;
     if (type === 'pencil') { radius *= 0.36; alpha *= 0.56; }
-    if (type === 'paintbrush') { radius *= 0.68; alpha *= 0.78; }
+    if (type === 'paintbrush') { radius *= 0.68; alpha *= 0.72; }
     target.globalAlpha = alpha;
     target.beginPath();
     target.arc(x, y, Math.max(0.5, radius), 0, Math.PI * 2);
     target.fill();
     if (type === 'paintbrush') {
+      target.strokeStyle = stroke.color;
+      target.lineCap = 'round';
+      target.lineWidth = Math.max(0.55, stroke.width * 0.055);
+      target.globalAlpha = opacity * 0.24;
+      for (let i = -3; i <= 3; i += 1) {
+        const offset = i * Math.max(0.7, stroke.width * 0.12);
+        target.beginPath();
+        target.moveTo(x + offset, y - radius * 0.58);
+        target.lineTo(x + offset, y + radius * 0.58);
+        target.stroke();
+      }
+    } else if (type === 'pencil') {
       target.globalAlpha = opacity * 0.22;
-      target.fillRect(x - radius * 1.35, y - radius * 0.18, radius * 2.7, Math.max(0.7, radius * 0.18));
+      for (let i = 0; i < 5; i += 1) {
+        const angle = i * 2.399;
+        const distance = radius * (0.35 + i * 0.12);
+        target.beginPath();
+        target.arc(x + Math.cos(angle) * distance, y + Math.sin(angle) * distance, Math.max(0.35, stroke.width * 0.035), 0, Math.PI * 2);
+        target.fill();
+      }
     }
     target.restore();
   }
@@ -144,13 +276,35 @@
     target.lineCap = 'round';
     target.lineJoin = 'round';
     if (type === 'pencil') {
-      line(baseWidth * 0.68, opacity * 0.6);
-      line(baseWidth * 0.28, opacity * 0.18, baseWidth * 0.17);
+      line(baseWidth * 0.62, opacity * 0.54);
+      target.fillStyle = stroke.color;
+      let seed = (Math.round(x1 * 31 + y1 * 67 + x2 * 97 + y2 * 131) ^ 0x5f3759df) >>> 0;
+      const random = () => {
+        seed = (seed * 1664525 + 1013904223) >>> 0;
+        return seed / 4294967296;
+      };
+      const dx = x2 - x1;
+      const dy = y2 - y1;
+      const length = Math.hypot(dx, dy) || 1;
+      const steps = Math.min(32, Math.max(1, Math.ceil(length / Math.max(2, baseWidth * 0.24))));
+      target.globalAlpha = opacity * 0.24;
+      for (let i = 0; i <= steps; i += 1) {
+        const t = i / steps;
+        const jitter = (random() - 0.5) * baseWidth * 0.68;
+        const alongX = x1 + dx * t;
+        const alongY = y1 + dy * t;
+        const grainX = alongX - (dy / length) * jitter;
+        const grainY = alongY + (dx / length) * jitter;
+        target.beginPath();
+        target.arc(grainX, grainY, Math.max(0.3, baseWidth * (0.025 + random() * 0.025)), 0, Math.PI * 2);
+        target.fill();
+      }
     } else if (type === 'paintbrush') {
-      line(baseWidth * 1.3, opacity * 0.48);
-      line(baseWidth * 0.72, opacity * 0.86);
-      line(baseWidth * 0.13, opacity * 0.28, baseWidth * 0.32);
-      line(baseWidth * 0.13, opacity * 0.25, -baseWidth * 0.32);
+      line(baseWidth * 1.2, opacity * 0.44);
+      line(baseWidth * 0.72, opacity * 0.84);
+      for (let i = -3; i <= 3; i += 1) {
+        line(baseWidth * 0.065, opacity * (i % 2 === 0 ? 0.24 : 0.16), i * baseWidth * 0.12);
+      }
     } else {
       line(baseWidth, opacity);
     }
@@ -562,8 +716,10 @@
   function closeShortcuts() { $('shortcuts-modal').hidden = true; }
 
   socket.on('connect', () => {
-    $('sidebar-connection').textContent = '실시간 연결됨';
-    $('connection-state').textContent = '연결됨';
+    connectionNoticeShown = false;
+    $('sidebar-connection').textContent = socket.localMode ? '로컬 미리보기' : '실시간 연결됨';
+    $('connection-state').textContent = socket.localMode ? '로컬 모드' : '연결됨';
+    if (socket.localMode) showToast('로컬 미리보기입니다. 다른 사람과 공유하려면 Node 서버로 실행하세요.');
     if (activeBoardId) {
       const stacks = stackFor();
       stacks.undo.length = 0;
@@ -579,6 +735,14 @@
     updateHistoryControls();
     $('sidebar-connection').textContent = '다시 연결 중';
     $('connection-state').textContent = '재연결 중';
+  });
+  socket.on('connect_error', () => {
+    $('sidebar-connection').textContent = '서버 연결 실패';
+    $('connection-state').textContent = '서버 확인 필요';
+    if (!connectionNoticeShown) {
+      connectionNoticeShown = true;
+      showToast('서버에 연결되지 않았어요. Node 서버를 실행하면 실시간 공유가 켜집니다.');
+    }
   });
 
   socket.on('boards:update', (nextBoards) => {
@@ -719,6 +883,10 @@
   });
 
   $('share-button').addEventListener('click', async () => {
+    if (socket.localMode) {
+      showToast('로컬 미리보기에서는 초대 링크를 공유할 수 없어요. Node 서버로 실행해 주세요.');
+      return;
+    }
     try {
       await navigator.clipboard.writeText(window.location.href);
       showToast('초대 링크를 복사했어요!');
