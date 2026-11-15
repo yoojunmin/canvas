@@ -1,0 +1,130 @@
+<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+    <meta name="theme-color" content="#10120f">
+    <meta name="description" content="친구들과 실시간으로 함께 그리는 멀티 캔버스 게임">
+    <title>모여그림 — 같이 그리는 캔버스</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=DM+Sans:wght@400;500;600;700;800&family=Noto+Sans+KR:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/styles.css">
+  </head>
+  <body>
+    <div class="app-shell">
+      <aside class="sidebar">
+        <a class="brand" href="/" aria-label="모여그림 홈">
+          <span class="brand-mark"><span></span><span></span><span></span><span></span></span>
+          <span>모여그림<span class="brand-dot">.</span></span>
+        </a>
+
+        <div class="sidebar-label-row">
+          <span class="sidebar-label">캔버스</span>
+          <span class="board-count" id="board-count">01</span>
+        </div>
+        <div class="board-list" id="board-list" aria-label="캔버스 목록"></div>
+        <button class="new-board" id="new-board"><span class="plus">+</span> 새 캔버스 만들기</button>
+
+        <div class="sidebar-bottom">
+          <div class="live-pill"><span class="live-dot"></span><span id="sidebar-connection">실시간 연결됨</span></div>
+          <div class="sidebar-note">친구와 링크를 공유하고<br>함께 그림을 완성해 보세요.</div>
+          <div class="version-label">MULTICANVAS <span>·</span> 01</div>
+        </div>
+      </aside>
+
+      <main class="main-area">
+        <header class="topbar">
+          <div class="mobile-brand">
+            <span class="brand-mark small"><span></span><span></span><span></span><span></span></span>
+            <span>모여그림<span class="brand-dot">.</span></span>
+          </div>
+          <div class="breadcrumb"><span>내 작업실</span><span class="crumb-slash">/</span><strong id="current-board-name">라운지</strong></div>
+          <div class="topbar-right">
+            <div class="presence"><span class="presence-dot"></span><strong id="people-count">1</strong><span>명 함께 그림</span></div>
+            <button class="share-button" id="share-button"><span aria-hidden="true">↗</span> 초대 링크</button>
+          </div>
+        </header>
+
+        <div class="mobile-board-strip">
+          <div class="mobile-board-list" id="mobile-board-list" aria-label="캔버스 목록"></div>
+          <button class="mobile-new-board" id="mobile-new-board" aria-label="새 캔버스 만들기" title="새 캔버스 만들기">+</button>
+        </div>
+
+        <section class="workspace">
+          <div class="canvas-heading">
+            <div>
+              <div class="eyebrow"><span class="eyebrow-star">✳</span> SHARED STUDIO</div>
+              <h1>함께 그리는 <span>우리의 캔버스</span></h1>
+              <p>지금 떠오른 걸 그려봐요. 모두에게 실시간으로 보여요.</p>
+            </div>
+            <button class="clear-button" id="clear-button" title="캔버스 비우기"><span>⌫</span> 캔버스 비우기</button>
+          </div>
+
+          <div class="canvas-stage">
+            <div class="canvas-paper" id="canvas-paper">
+              <canvas id="drawing-canvas" width="1200" height="760" aria-label="공유 그림 캔버스"></canvas>
+              <div class="canvas-stamp"><span class="stamp-live"></span> LIVE CANVAS</div>
+              <div class="canvas-hint" id="canvas-hint"><span class="hint-spark">✳</span><strong>첫 번째 그림을 그려보세요</strong><span>아래 도구를 골라 캔버스를 채워봐요</span></div>
+            </div>
+          </div>
+
+          <section class="tool-panel" aria-label="그림 도구">
+            <div class="tool-group drawing-tools">
+              <div class="tool-group-title">도구</div>
+              <div class="tool-buttons">
+                <button class="tool-button selected" data-tool="brush" aria-label="브러시" title="브러시 (B)"><span class="tool-icon">✎</span><span>브러시</span></button>
+                <button class="tool-button" data-tool="eraser" aria-label="지우개" title="지우개 (E)"><span class="tool-icon eraser-icon">◩</span><span>지우개</span></button>
+                <button class="tool-button" data-tool="fill" aria-label="페인트통" title="페인트통 (F)"><span class="tool-icon">◕</span><span>페인트</span></button>
+                <button class="tool-button" data-tool="eyedropper" aria-label="스포이드" title="스포이드 (I)"><span class="tool-icon">⌖</span><span>스포이드</span></button>
+              </div>
+            </div>
+
+            <div class="panel-divider"></div>
+
+            <div class="tool-group brush-size-group">
+              <div class="tool-group-title">브러시 크기 <span id="size-value">12</span></div>
+              <div class="size-control"><span class="size-dot tiny"></span><input id="brush-size" type="range" min="2" max="64" value="12" aria-label="브러시 크기"><span class="size-dot big"></span></div>
+            </div>
+
+            <div class="panel-divider color-divider"></div>
+
+            <div class="tool-group color-group">
+              <div class="tool-group-title">색상 <span class="color-live-label">LIVE COLOR</span></div>
+              <div class="color-controls">
+                <label class="color-preview-wrap" title="색상 선택"><input type="color" id="color-picker" value="#ff6b4a" aria-label="색상 선택"><span class="color-preview" id="color-preview"></span></label>
+                <label class="hex-input-wrap"><span>#</span><input id="hex-input" type="text" value="FF6B4A" maxlength="6" aria-label="HEX 색상"></label>
+                <div class="rgb-inputs">
+                  <label><span>R</span><input id="red-input" type="number" min="0" max="255" value="255" aria-label="빨강 값"></label>
+                  <label><span>G</span><input id="green-input" type="number" min="0" max="255" value="107" aria-label="초록 값"></label>
+                  <label><span>B</span><input id="blue-input" type="number" min="0" max="255" value="74" aria-label="파랑 값"></label>
+                </div>
+              </div>
+              <div class="color-footnote"><span class="tiny-swatch"></span> RGB 값을 직접 조정해 보세요</div>
+            </div>
+          </section>
+
+          <footer class="workspace-footer"><span><kbd>마우스</kbd> 또는 <kbd>터치</kbd>로 그리기</span><span class="footer-separator">·</span><span>모든 그림은 실시간으로 공유돼요</span><span class="footer-status"><span class="live-dot"></span> <span id="connection-state">연결 중</span></span></footer>
+        </section>
+      </main>
+    </div>
+
+    <div class="modal-backdrop" id="board-modal" hidden>
+      <form class="modal-card" id="board-form">
+        <button type="button" class="modal-close" id="close-modal" aria-label="닫기">×</button>
+        <div class="modal-icon">✳</div>
+        <div class="eyebrow">NEW SHARED SPACE</div>
+        <h2>새 캔버스 만들기</h2>
+        <p>친구들과 함께 그릴 공간의 이름을 정해 주세요.</p>
+        <label class="modal-input-label" for="board-name">캔버스 이름</label>
+        <input class="modal-input" id="board-name" maxlength="28" placeholder="예: 토요일 낙서 모임" required autocomplete="off">
+        <div class="modal-error" id="modal-error" role="status"></div>
+        <button class="modal-submit" type="submit">캔버스 만들기 <span>↗</span></button>
+      </form>
+    </div>
+
+    <div class="toast" id="toast" role="status" aria-live="polite"></div>
+    <script src="/socket.io/socket.io.js"></script>
+    <script src="/app.js"></script>
+  </body>
+</html>
